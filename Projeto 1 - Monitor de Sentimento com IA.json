@@ -1,0 +1,240 @@
+{
+  "name": "Projeto 1 - Monitor de Sentimento com IA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "monitor-sentimento",
+        "options": {}
+      },
+      "id": "6882ced1-e426-4d09-92a9-bd0bfc34ce91",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "4f5976f3-5fef-45cf-8cde-00298a6cb54d"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-6-luna",
+          "cachedResultName": "GPT-6-LUNA"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Analise o seguinte comentário de cliente: \"{{ $json.body.comentario }}\""
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "instructions": "Você é um analista de atendimento ao cliente. Analise o texto recebido e responda obrigatoriamente em formato JSON puro, sem blocos de código markdown nem crases, contendo exatamente estas chaves: {\"sentimento\": \"Positivo\" | \"Neutro\" | \"Negativo\", \"resumo\": \"síntese analítica de uma única frase\", \"urgente\": true | false}. O campo sentimento deve ser estritamente um dos três valores.",
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "id": "130e3793-18cf-4b0b-9779-6b01f84bcff4",
+      "name": "Analisar Sentimento (IA)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst origem = $('Webhook').all();\nconst processedItems = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const body = (origem[i] && origem[i].json.body) || {};\n  const base = {\n    cliente: body.cliente || '',\n    canal: body.canal || '',\n    comentario: body.comentario || '',\n  };\n  try {\n    let ai = item.json.output && item.json.output[0] && item.json.output[0].content && item.json.output[0].content[0]\n      ? item.json.output[0].content[0].text\n      : (item.json.text || (item.json.message && item.json.message.content));\n\n    if (typeof ai === 'string') {\n      ai = ai.replace(/\\x60\\x60\\x60(json)?/gi, '').trim();\n      ai = JSON.parse(ai);\n    }\n    if (!ai || typeof ai !== 'object') throw new Error('Resposta da IA vazia ou inválida');\n\n    const validos = ['Positivo', 'Neutro', 'Negativo'];\n    const sentimento = validos.includes(ai.sentimento) ? ai.sentimento : 'Desconhecido';\n    const urgente = ai.urgente === true || ai.urgente === 'true';\n\n    let nivelAlerta;\n    if (sentimento === 'Negativo' && urgente) {\n      nivelAlerta = 'CRÍTICO - Requer ação imediata';\n    } else if (sentimento === 'Negativo') {\n      nivelAlerta = 'Alto';\n    } else if (urgente) {\n      nivelAlerta = 'Médio';\n    } else if (sentimento === 'Neutro') {\n      nivelAlerta = 'Baixo';\n    } else if (sentimento === 'Positivo') {\n      nivelAlerta = 'Nenhum';\n    } else {\n      nivelAlerta = 'Revisar manualmente';\n    }\n\n    processedItems.push({\n      json: {\n        ...base,\n        sentimento,\n        resumo: ai.resumo || '',\n        urgente,\n        nivelAlerta,\n        processadoEm: new Date().toISOString(),\n        erroDetalhe: '',\n      },\n    });\n  } catch (error) {\n    processedItems.push({\n      json: {\n        ...base,\n        sentimento: 'Desconhecido',\n        resumo: 'Erro ao processar resposta da IA',\n        urgente: false,\n        nivelAlerta: 'Erro',\n        processadoEm: new Date().toISOString(),\n        erroDetalhe: error.message,\n      },\n    });\n  }\n}\n\nreturn processedItems;"
+      },
+      "id": "1e1f4f57-88e7-45aa-b655-912e25e2c7f6",
+      "name": "Code (Tratamento JS)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1_2FyeZwMwmnsBx9jEaAJPmCcASDGgNUA2yuCX3q_tWI/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Página1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": [
+            {
+              "id": "processadoEm",
+              "displayName": "processadoEm",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cliente",
+              "displayName": "cliente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "canal",
+              "displayName": "canal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comentario",
+              "displayName": "comentario",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentimento",
+              "displayName": "sentimento",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "resumo",
+              "displayName": "resumo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgente",
+              "displayName": "urgente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nivelAlerta",
+              "displayName": "nivelAlerta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erroDetalhe",
+              "displayName": "erroDetalhe",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8bae7bc3-b0cb-49b4-8cdc-59508b6f149b",
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSvZiZPvJDrPOk62",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analisar Sentimento (IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analisar Sentimento (IA)": {
+      "main": [
+        [
+          {
+            "node": "Code (Tratamento JS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (Tratamento JS)": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b8a2b144-de0e-4f80-8c80-5fa530cb7216",
+  "meta": {
+    "instanceId": "d72f3085d540b439836ffa59097615a85b9abdd43a10bb2ef650f73788f18bc7"
+  },
+  "nodeGroups": [],
+  "id": "CqQIvViIvzBOVXkZ",
+  "tags": []
+}
